@@ -1,99 +1,119 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QFrame
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIntValidator
+import os
+import logging
+import shutil
+import socket
+import subprocess
+import tempfile
+import threading
+from pathlib import Path
 
-class VySkanna(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        
-        # CHASSILAYOUT (Responsiv landscape-design utan fasta pixelfönster)
-        self.huvud_layout = QHBoxLayout(self)
-        self.huvud_layout.setContentsMargins(0, 0, 0, 0)
-        self.huvud_layout.setSpacing(0)
-        
-        # Hämta skärmhöjd för exakt, stram textskalning (4% av H)
-        self.H = self.screen().geometry().height()
-        self.text_storlek = max(14, int(self.H * 0.04))
-        
-        # -------------------------------------------------------------
-        # VÄNSTER HALVA (50% av W): Rent, fast rutnät för all rådata
-        # -------------------------------------------------------------
-        self.vanster_chassi = QWidget(self)
-        self.vanster_layout = QVBoxLayout(self.vanster_chassi)
-        self.vanster_layout.setContentsMargins(20, 20, 20, 20)
-        self.vanster_layout.setSpacing(15)
-        
-        # RAM 1: Scanfönster / Kamerasökare (Låst till 1 pt rätvinklig ram)
-        self.scanfinstret = QFrame(self)
-        self.scanfinstret.setStyleSheet("border: 1pt solid #444444; background-color: #0d0d0d;")
-        
-        self.scan_text = QLabel("[ KAMERAN AV - VILOLÄGE ]", self.scanfinstret)
-        self.scan_text.setAlignment(Qt.AlignCenter)
-        self.scan_text.setStyleSheet(f"font-family: monospace; font-size: {self.text_storlek}px; color: #555555; border: none;")
-        
-        scan_inner = QVBoxLayout(self.scanfinstret)
-        scan_inner.setContentsMargins(0, 0, 0, 0)
-        scan_inner.addWidget(self.scan_text)
-        self.vanster_layout.addWidget(self.scanfinstret, stretch=35)
-        
-        # RAM 2: Hårdvarulåst Tuner-fönster (Enbart heltal/siffror)
-        self.tuner_pris = QLineEdit(self)
-        self.tuner_pris.setPlaceholderText(" ANGE INKÖPSPRIS (SEK)...")
-        self.tuner_pris.setValidator(QIntValidator(0, 999999, self)) 
-        self.tuner_pris.setStyleSheet(f"""
-            QLineEdit {{
-                border: 1pt solid #444444; 
-                background-color: #222222; 
-                color: #ffffff; 
-                font-family: monospace; 
-                font-size: {int(self.text_storlek * 0.8)}px;
-                padding: 8px;
-            }}
-        """)
-        self.vanster_layout.addWidget(self.tuner_pris, stretch=10)
-        
-        # RAM 3: Datamatris i spalter (INGA SCROLLISTER TILLÅTNA)
-        self.matris_ram = QFrame(self)
-        self.matris_ram.setStyleSheet("border: 1pt solid #444444; background-color: #151515;")
-        
-        # Horisontell layout inuti ramen för att fläka ut texten i rena spalter
-        self.spalt_layout = QHBoxLayout(self.matris_ram)
-        self.spalt_layout.setContentsMargins(10, 10, 10, 10)
-        self.spalt_layout.setSpacing(20)
-        
-        # Spalt 1: Basfakta & Marknadsvärden
-        self.spalt_info = QLabel("VÄNTAR PÅ INDATA...", self.matris_ram)
-        self.spalt_info.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.spalt_info.setStyleSheet(f"font-family: monospace; font-size: {int(self.text_storlek * 0.75)}px; color: #aaaaaa; border: none;")
-        
-        # Spalt 2: Den fullständiga låtlistan och unika identifierare (Matrix/Runout)
-        self.spalt_latar = QLabel("", self.matris_ram)
-        self.spalt_latar.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.spalt_latar.setStyleSheet(f"font-family: monospace; font-size: {int(self.text_storlek * 0.75)}px; color: #888888; border: none;")
-        
-        self.spalt_layout.addWidget(self.spalt_info, stretch=50)
-        self.spalt_layout.addWidget(self.spalt_latar, stretch=50)
-        
-        self.vanster_layout.addWidget(self.matris_ram, stretch=55)
-        
-        # -------------------------------------------------------------
-        # HÖGER HALVA (50% av W): GIGANTISK TRYCKYTA (Helt orörlig platta)
-        # -------------------------------------------------------------
-        self.gigantisk_knapp = QFrame(self)
-        self.gigantisk_knapp.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #444444, stop:1 #2d2d2d);
-            border: 1pt solid #111111; 
-            border-left: 1pt solid #3a3a3a;
-        """)
-        
-        self.knapp_text = QLabel("[ SCAN ]", self.gigantisk_knapp)
-        self.knapp_text.setAlignment(Qt.AlignCenter)
-        self.knapp_text.setStyleSheet(f"font-family: monospace; font-size: {int(self.text_storlek * 1.4)}px; font-weight: bold; color: #ffffff; border: none; background: transparent;")
-        
-        knapp_layout = QVBoxLayout(self.gigantisk_knapp)
-        knapp_layout.setContentsMargins(0, 0, 0, 0)
-        knapp_layout.addWidget(self.knapp_text)
-        
-        # Spika den exakta 50/50-fördelningen i chassit
-        self.huvud_layout.addWidget(self.vanster_chassi, stretch=50)
-        self.huvud_layout.addWidget(self.gigantisk_knapp, stretch=50)
+from nicegui import ui as nicegui_ui
+
+from modules.config import Settings
+
+import ui.panels.report_panel  # noqa: F401
+import modules.camera  # noqa: F401
+import ui.panels.collection_panel  # noqa: F401
+import ui.panels.record_panel  # noqa: F401
+import ui.panels.scan_panel  # noqa: F401
+import ui.panels.search_panel  # noqa: F401
+import ui.panels.start_panel  # noqa: F401
+import ui.panels.statistics_panel  # noqa: F401
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def local_network_address() -> str:
+	try:
+		with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
+			connection.connect(('8.8.8.8', 80))
+			return connection.getsockname()[0]
+	except OSError:
+		return '127.0.0.1'
+
+
+def launch_kiosk_browser(url: str) -> None:
+	browser_candidates = (
+		os.environ.get('PROGRAMFILES(X86)', ''),
+		os.environ.get('PROGRAMFILES', ''),
+		os.environ.get('LOCALAPPDATA', ''),
+	)
+	browser_paths = (
+		Path(browser_candidates[0]) / 'Microsoft/Edge/Application/msedge.exe',
+		Path(browser_candidates[1]) / 'Microsoft/Edge/Application/msedge.exe',
+		Path(browser_candidates[2]) / 'Google/Chrome/Application/chrome.exe',
+	)
+
+	for browser_path in browser_paths:
+		if browser_path.is_file():
+			_launch_browser(str(browser_path), url)
+			return
+
+	browser = shutil.which('msedge') or shutil.which('chrome')
+	if browser:
+		_launch_browser(browser, url)
+		return
+	LOGGER.warning('No supported kiosk browser found; open %s manually', url)
+
+
+def _launch_browser(browser: str, url: str) -> None:
+	name = Path(browser).stem.lower()
+	# Persistent (not per-PID) profile so the PC webcam permission for KTOM is remembered between launches.
+	profile_dir = Path(tempfile.gettempdir()) / 'ktom-kiosk-profile'
+	arguments = [
+		browser,
+		'--new-window',
+		'--no-first-run',
+		'--no-default-browser-check',
+		f'--user-data-dir={profile_dir}',
+		'--disable-session-crashed-bubble',
+		'--kiosk',
+		'--autoplay-policy=no-user-gesture-required',
+		# Kiosk mode can hide the camera permission prompt entirely; auto-accept it instead.
+		'--use-fake-ui-for-media-stream',
+	]
+	if name == 'msedge':
+		arguments.append('--edge-kiosk-type=fullscreen')
+	arguments.append(url)
+	LOGGER.info('Launching kiosk browser: %s', arguments)
+	try:
+		subprocess.Popen(arguments)
+	except OSError:
+		LOGGER.exception('Could not launch kiosk browser %s', browser)
+
+
+def console_menu(url: str) -> None:
+	while True:
+		print('\nKTOM')
+		print('1. Öppna startsida')
+		print('2. Avsluta KTOM')
+		try:
+			choice = input('Välj: ').strip()
+		except (EOFError, KeyboardInterrupt):
+			os._exit(0)
+		if choice == '1':
+			launch_kiosk_browser(url)
+		elif choice == '2':
+			os._exit(0)
+
+
+if __name__ in {'__main__', '__mp_main__'}:
+	logging.basicConfig(level=os.getenv('KTOM_LOG_LEVEL', 'INFO').upper())
+	settings = Settings.from_environment()
+	start_url = f'http://localhost:{settings.port}'
+	if settings.kiosk_browser:
+		threading.Timer(
+			1.0,
+			launch_kiosk_browser,
+			args=(start_url,),
+		).start()
+		threading.Thread(target=console_menu, args=(start_url,), daemon=True).start()
+	nicegui_ui.run(
+		host=settings.host,
+		port=settings.port,
+		dark=True,
+		viewport='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+		reload=False,
+		show=False,
+	)

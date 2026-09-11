@@ -1,0 +1,28 @@
+# =================================================================
+# MASTER RECEPT & RULES FOR: KEEP TABS ON MEDIA (v.0.0001)
+# =================================================================
+
+[GLOBAL APP ARCHITECTURE]
+- Language: Python 3.12+ using NiceGUI (FastAPI/Uvicorn running asynchronously).
+- Layout: LOCKED in Landscape (horizontal) mode for kiosk-view on all touch devices.
+- Visual Aesthetic: Dark mode, brushed metal design. UI buttons must be large and touch-friendly.
+
+[DATABASE SAFETY & LOCK RULES (CHECKPOINT 1)]
+- Main Database format: 'name_surname_city_date.sqlite3' (e.g., johan_andersson_stockholm_20260911.sqlite3).
+- Startup Rule: Always start the application locked to the private owner database in read/write mode.
+- External DB Rule: If opening a friend's database, enforce Read-Only mode on system level using SQLite URI: "file:path_to_db?mode=ro".
+- UI Reaction: If active DB is Read-Only, automatically disable or hide all SCAN and SAVE buttons in NiceGUI using bindings.
+
+[FAIR/EXPO MODES - "CHECK PRICE"]
+- Create 'check_price_panel.py' inside 'ui/panels/' as a completely isolated tool.
+- This panel MUST NOT have any connections or write-permissions to the SQLite database (no cursor.execute allowed).
+- Flow: Scan barcode -> fetch live Discogs pricing via 'modules/services.py' -> compare asking price -> display color-coded Traffic Light (Green/Yellow/Red) + Warning if already owned in private DB.
+
+[FUTURE RELEASE v.1.0 ROADMAP]
+- Maintain clean, modular code to eventually support PyInstaller compilation.
+- Ensure 'ui/panels/report_panel.py' can generate formatted Word/PDF documents via 'python-docx' for insurance companies to secure values for large collections up to 26,000 records.
+
+# =================================================================
+# NOTE TO AI: Always read this file before suggesting any code. 
+# Do not hallucinate methods. Keep code asynchronous where needed.
+# =================================================================
