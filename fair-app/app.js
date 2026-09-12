@@ -223,7 +223,6 @@ async function startCamera() {
     }
 }
 
-document.querySelector('#start-camera').addEventListener('click', startCamera);
 cameraWrap.addEventListener('click', startCamera);
 cameraWrap.addEventListener('keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') {
