@@ -89,6 +89,16 @@ function stopCamera() {
     controls = null;
 }
 
+function improveBarcodeView(stream) {
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track?.getCapabilities || !track?.applyConstraints) return;
+    const capabilities = track.getCapabilities();
+    const zoom = capabilities.zoom;
+    if (!zoom || zoom.max <= 1) return;
+    const target = Math.min(2.5, zoom.max);
+    track.applyConstraints({ advanced: [{ zoom: target }] }).catch(() => { });
+}
+
 async function addScan(barcode) {
     if (/^https?:\/\//i.test(barcode)) {
         links.unshift({ value: barcode, savedAt: new Date().toISOString() });
@@ -235,7 +245,14 @@ async function startCamera() {
             status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
             if (reader.decodeFromConstraints) {
                 controls.readerControls = await reader.decodeFromConstraints(
-                    { video: { facingMode: { ideal: 'environment' } }, audio: false },
+                    {
+                        video: {
+                            facingMode: { ideal: 'environment' },
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 },
+                        },
+                        audio: false,
+                    },
                     camera,
                     async scanResult => {
                         if (!scanResult || !controls || controls.stopped) return;
@@ -254,25 +271,31 @@ async function startCamera() {
                     },
                 );
             }
+            improveBarcodeView(camera.srcObject);
             return;
         }
 
         let stream;
         try {
             stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: 'environment' } },
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                },
                 audio: false,
             });
         } catch (error) {
             if (error.name !== 'OverconstrainedError' && error.name !== 'NotFoundError') throw error;
             stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
+        improveBarcodeView(stream);
         camera.srcObject = stream;
         camera.muted = true;
         camera.setAttribute('playsinline', '');
         await camera.play();
         status.className = 'status status-neutral';
-        status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
+        status.textContent = 'Kamera aktiv - håll streckkoden nära och fyll rutan.';
         controls = { stream, stopped: false };
 
         if ('BarcodeDetector' in window) {
