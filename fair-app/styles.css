@@ -53,10 +53,11 @@ button {
     text-align: center;
 }
 
-.brand-mark {
-    color: var(--accent);
-    font: 900 clamp(3.2rem, 14vw, 5.7rem)/.9 'Trebuchet MS', 'Segoe UI', sans-serif;
-    letter-spacing: .08em;
+.brand-logo {
+    display: block;
+    width: min(341px, 88vw);
+    height: auto;
+    margin: 0 auto;
 }
 
 .app-header h1 {
