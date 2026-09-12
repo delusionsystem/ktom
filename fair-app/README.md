@@ -18,7 +18,7 @@ Mäss-appen kan publiceras separat på GitHub Pages utan KTOM-dator på mässan.
 Workflow-filen `.github/workflows/deploy-fair-app.yml` publicerar endast denna
 mapp. Efter att GitHub Pages har aktiverats med GitHub Actions blir adressen:
 
-`https://delusionsystem.github.io/ktom/fair-app/`
+`https://delusionsystem.github.io/ktom/`
 
 ## Prototypflöde
 
