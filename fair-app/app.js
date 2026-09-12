@@ -222,45 +222,43 @@ async function startCamera() {
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('HTTPS_REQUIRED');
 
         if (!('BarcodeDetector' in window)) {
-            let zxing;
-            try {
-                zxing = await loadLegacyZXing();
-            } catch {
-                zxing = await loadZXing();
-            }
-            const Reader = zxing.BrowserMultiFormatReader;
-            const reader = new Reader();
-            controls = { stopped: false, reader };
+            const zxing = await loadLegacyZXing();
+            const reader = new zxing.BrowserMultiFormatReader();
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                },
+                audio: false,
+            });
+            camera.srcObject = stream;
+            camera.muted = true;
+            camera.setAttribute('playsinline', '');
+            await camera.play();
+            controls = { stopped: false, reader, stream };
             status.className = 'status status-neutral';
             status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
-            if (reader.decodeFromConstraints) {
-                controls.readerControls = await reader.decodeFromConstraints(
-                    {
-                        video: {
-                            facingMode: { ideal: 'environment' },
-                            width: { ideal: 1920 },
-                            height: { ideal: 1080 },
-                        },
-                        audio: false,
-                    },
-                    camera,
-                    async scanResult => {
-                        if (!scanResult || !controls || controls.stopped) return;
-                        stopCamera();
-                        await addScan(scanResult.getText());
-                    },
-                );
-            } else {
-                controls.readerControls = await reader.decodeFromVideoDevice(
-                    undefined,
-                    camera,
-                    async scanResult => {
-                        if (!scanResult || !controls || controls.stopped) return;
-                        stopCamera();
-                        await addScan(scanResult.getText());
-                    },
-                );
-            }
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            const scanFrame = async () => {
+                if (!controls || controls.stopped) return;
+                if (camera.videoWidth && camera.videoHeight) {
+                    canvas.width = camera.videoWidth;
+                    canvas.height = camera.videoHeight;
+                    context.drawImage(camera, 0, 0, canvas.width, canvas.height);
+                    try {
+                        const scanResult = reader.decodeFromCanvas(canvas);
+                        if (scanResult?.getText()) {
+                            stopCamera();
+                            await addScan(scanResult.getText());
+                            return;
+                        }
+                    } catch { }
+                }
+                window.setTimeout(scanFrame, 100);
+            };
+            scanFrame();
             return;
         }
 
