@@ -21,6 +21,33 @@ let pendingBarcode = null;
 let pendingRelease = null;
 let links = JSON.parse(localStorage.getItem('ktom-fair-links-v1') || '[]');
 
+function loadZXing() {
+    if (window.ZXingBrowser) return Promise.resolve(window.ZXingBrowser);
+    return new Promise((resolve, reject) => {
+        const sources = [
+            'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js',
+            'https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js',
+        ];
+        let index = 0;
+        const tryNext = () => {
+            if (window.ZXingBrowser) {
+                resolve(window.ZXingBrowser);
+                return;
+            }
+            if (index >= sources.length) {
+                reject(new Error('BARCODE_SUPPORT'));
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = sources[index++];
+            script.onload = () => window.ZXingBrowser ? resolve(window.ZXingBrowser) : tryNext();
+            script.onerror = tryNext;
+            document.head.append(script);
+        };
+        tryNext();
+    });
+}
+
 function formatPrice(value) {
     return Number.isFinite(value) ? `${Math.round(value)} kr` : 'Saknas';
 }
@@ -198,17 +225,15 @@ async function startCamera() {
                 requestAnimationFrame(scan);
             };
             requestAnimationFrame(scan);
-        } else if (window.ZXingBrowser) {
-            const reader = new ZXingBrowser.BrowserMultiFormatReader();
+        } else {
+            const zxing = await loadZXing();
+            const reader = new zxing.BrowserMultiFormatReader();
             controls.reader = reader;
             reader.decodeFromVideoElement(camera, async scanResult => {
                 if (!scanResult || !controls || controls.stopped) return;
                 stopCamera();
                 await addScan(scanResult.getText());
             });
-        } else {
-            stopCamera();
-            throw new Error('BARCODE_SUPPORT');
         }
     } catch (error) {
         stopCamera();
