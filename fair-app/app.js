@@ -1,0 +1,197 @@
+const camera = document.querySelector('#camera');
+const status = document.querySelector('#scan-status');
+const askingPrice = document.querySelector('#asking-price');
+const pricePanel = document.querySelector('#price-panel');
+const checkPrice = document.querySelector('#check-price');
+const result = document.querySelector('#price-result');
+const priceSignal = document.querySelector('#price-signal');
+const resultTitle = document.querySelector('#result-title');
+const resultArtist = document.querySelector('#result-artist');
+const resultAskingPrice = document.querySelector('#result-asking-price');
+const resultLowestPrice = document.querySelector('#result-lowest-price');
+const resultMedianPrice = document.querySelector('#result-median-price');
+const savedLinks = document.querySelector('#saved-links');
+let controls = null;
+let pendingBarcode = null;
+let links = JSON.parse(localStorage.getItem('ktom-fair-links-v1') || '[]');
+
+function formatPrice(value) {
+    return Number.isFinite(value) ? `${Math.round(value)} kr` : 'Saknas';
+}
+
+function stopCamera() {
+    if (!controls) return;
+    controls.stopped = true;
+    controls.reader?.reset();
+    controls.stream.getTracks().forEach(track => track.stop());
+    camera.srcObject = null;
+    controls = null;
+}
+
+async function addScan(barcode) {
+    if (/^https?:\/\//i.test(barcode)) {
+        links.unshift({ value: barcode, savedAt: new Date().toISOString() });
+        localStorage.setItem('ktom-fair-links-v1', JSON.stringify(links));
+        renderLinks();
+        status.className = 'status status-success';
+        status.textContent = 'Webbadress sparad lokalt. Nästa scanning startar.';
+        return;
+    }
+    pendingBarcode = barcode;
+    pricePanel.hidden = false;
+    askingPrice.focus();
+    status.className = 'status status-neutral';
+    status.textContent = `Barcode ${barcode} läst. Skriv säljarens pris.`;
+}
+
+async function checkPendingPrice() {
+    const asking = Number.parseFloat(askingPrice.value);
+    if (!pendingBarcode || !Number.isFinite(asking) || asking < 0) {
+        status.className = 'status status-error';
+        status.textContent = 'Skriv ett giltigt begärt pris först.';
+        askingPrice.focus();
+        return;
+    }
+    status.className = 'status status-neutral';
+    status.textContent = `Hämtar marknadspris för ${pendingBarcode}...`;
+    try {
+        const release = await lookupDiscogs(pendingBarcode);
+        showPriceResult(release, pendingBarcode);
+    } catch (error) {
+        status.className = 'status status-error';
+        status.textContent = `Kunde inte hämta pris: ${error.message}`;
+    }
+}
+
+function showPriceResult(release, barcode) {
+    const asking = Number.parseFloat(askingPrice.value);
+    const lowest = release.lowestPrice;
+    const median = release.medianPrice;
+    let signal = 'PRISDATA SAKNAS';
+    let signalClass = 'price-unknown';
+    let explanation = `Barcode: ${barcode}`;
+
+    if (Number.isFinite(asking) && Number.isFinite(lowest)) {
+        if (asking <= lowest) {
+            signal = 'BRA PRIS';
+            signalClass = 'price-good';
+            explanation = 'Begärt pris ligger på eller under lägsta kända marknadspris.';
+        } else if (!Number.isFinite(median) || asking <= median) {
+            signal = 'OK';
+            signalClass = 'price-fair';
+            explanation = 'Begärt pris ligger inom den kända marknadsnivån.';
+        } else {
+            signal = 'DÅLIGT PRIS';
+            signalClass = 'price-expensive';
+            explanation = 'Begärt pris ligger över medianpriset på Discogs.';
+        }
+    }
+
+    result.hidden = false;
+    priceSignal.className = `price-signal ${signalClass}`;
+    priceSignal.textContent = signal;
+    resultTitle.textContent = release.title || 'Okänd utgåva';
+    resultArtist.textContent = `${release.artist || 'Okänd artist'} · ${explanation}`;
+    resultAskingPrice.textContent = formatPrice(asking);
+    resultLowestPrice.textContent = formatPrice(lowest);
+    resultMedianPrice.textContent = formatPrice(median);
+    status.className = 'status status-success';
+    status.textContent = 'Prisbedömning klar.';
+}
+
+async function lookupDiscogs(barcode) {
+    const query = new URLSearchParams({ barcode, type: 'release', per_page: '1' });
+    const searchResponse = await fetch(`https://api.discogs.com/database/search?${query}`, { headers: { Accept: 'application/json' } });
+    if (!searchResponse.ok) throw new Error(`Discogs HTTP ${searchResponse.status}`);
+    const search = await searchResponse.json();
+    const match = search.results?.[0];
+    if (!match?.id) throw new Error('Ingen Discogs-träff');
+
+    const releaseResponse = await fetch(`https://api.discogs.com/releases/${match.id}`, { headers: { Accept: 'application/json' } });
+    if (!releaseResponse.ok) throw new Error(`Discogs HTTP ${releaseResponse.status}`);
+    const release = await releaseResponse.json();
+    const lowestPrice = release.lowest_price ?? release.marketplace_stats?.lowest_price?.value;
+    const medianPrice = release.marketplace_stats?.median_price?.value ?? release.stats?.median_price?.value;
+    return {
+        title: release.title || match.title,
+        artist: (release.artists || []).map(artist => artist.name).join(', '),
+        lowestPrice: Number.isFinite(Number(lowestPrice)) ? Number(lowestPrice) * 11 : NaN,
+        medianPrice: Number.isFinite(Number(medianPrice)) ? Number(medianPrice) * 11 : NaN,
+    };
+}
+
+async function startCamera() {
+    try {
+        if (controls && !controls.stopped) return;
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('HTTPS_REQUIRED');
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        camera.srcObject = stream;
+        status.className = 'status status-neutral';
+        status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
+        controls = { stream, stopped: false };
+
+        if ('BarcodeDetector' in window) {
+            const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] });
+            const scan = async () => {
+                if (!controls || controls.stopped) return;
+                try {
+                    const results = await detector.detect(camera);
+                    if (results.length && results[0].rawValue) {
+                        stopCamera();
+                        await addScan(results[0].rawValue);
+                        return;
+                    }
+                } catch { }
+                requestAnimationFrame(scan);
+            };
+            requestAnimationFrame(scan);
+        } else if (window.ZXingBrowser) {
+            const reader = new ZXingBrowser.BrowserMultiFormatReader();
+            controls.reader = reader;
+            reader.decodeFromVideoElement(camera, async scanResult => {
+                if (!scanResult || !controls || controls.stopped) return;
+                stopCamera();
+                await addScan(scanResult.getText());
+            });
+        } else {
+            stopCamera();
+            throw new Error('BARCODE_SUPPORT');
+        }
+    } catch (error) {
+        stopCamera();
+        status.className = 'status status-error';
+        status.textContent = error.message === 'HTTPS_REQUIRED'
+            ? 'Kameran kräver HTTPS. Öppna mässappen via en https-adress.'
+            : error.message === 'BARCODE_SUPPORT'
+                ? 'Barcode-stöd saknas. Kontrollera internetanslutningen och ladda om sidan.'
+                : 'Kameran kunde inte startas. Tillåt kameraåtkomst och försök igen.';
+    }
+}
+
+document.querySelector('#start-camera').addEventListener('click', startCamera);
+checkPrice.addEventListener('click', checkPendingPrice);
+document.querySelector('#scan-again').addEventListener('click', () => {
+    result.hidden = true;
+    pricePanel.hidden = true;
+    askingPrice.value = '';
+    pendingBarcode = null;
+    startCamera();
+});
+
+function renderLinks() {
+    savedLinks.replaceChildren();
+    if (!links.length) {
+        savedLinks.textContent = 'Inga webbadresser sparade ännu.';
+        return;
+    }
+    links.forEach(link => {
+        const anchor = document.createElement('a');
+        anchor.href = link.value;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.textContent = link.value;
+        savedLinks.append(anchor);
+    });
+}
+
+renderLinks();

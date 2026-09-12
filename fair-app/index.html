@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="sv">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111315">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+    <title>KTOM Massan</title>
+</head>
+
+<body>
+    <main class="app-shell">
+        <header class="app-header">
+            <div>
+                <p class="eyebrow">KEEP TRACK OF MEDIA</p>
+                <h1>Prischeck</h1>
+            </div>
+        </header>
+
+        <section class="scanner-panel" aria-labelledby="scanner-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">AKTIV PRISSCANNER</p>
+                    <h2 id="scanner-title">Scanna skiva</h2>
+                </div>
+                <button id="start-camera" class="button button-primary">Starta kamera</button>
+            </div>
+            <div class="camera-wrap">
+                <video id="camera" autoplay muted playsinline></video>
+                <div class="scan-frame" aria-hidden="true"></div>
+            </div>
+            <p id="scan-status" class="status status-neutral">Kameran väntar på start.</p>
+        </section>
+
+        <section id="price-panel" class="price-panel" aria-labelledby="price-title" hidden>
+            <p class="eyebrow">BEGÄRT PRIS</p>
+            <h2 id="price-title">Vad vill säljaren ha?</h2>
+            <label for="asking-price">Pris i kronor</label>
+            <input id="asking-price" type="number" min="0" step="1" inputmode="decimal" placeholder="Till exempel 150">
+            <button id="check-price" class="button button-primary">Bedöm pris</button>
+        </section>
+        <section id="price-result" class="price-result" aria-live="polite" hidden>
+            <p id="price-signal" class="price-signal"></p>
+            <h2 id="result-title"></h2>
+            <p id="result-artist" class="result-meta"></p>
+            <dl class="price-facts">
+                <div>
+                    <dt>Begärt pris</dt>
+                    <dd id="result-asking-price"></dd>
+                </div>
+                <div>
+                    <dt>Lägsta Discogs-pris</dt>
+                    <dd id="result-lowest-price"></dd>
+                </div>
+                <div>
+                    <dt>Median Discogs-pris</dt>
+                    <dd id="result-median-price"></dd>
+                </div>
+            </dl>
+            <button id="scan-again" class="button button-primary">Scanna nästa</button>
+        </section>
+        <section class="links-panel" aria-labelledby="links-title">
+            <p class="eyebrow">LOKALT PÅ ENHETEN</p>
+            <h2 id="links-title">Sparade webbadresser</h2>
+            <div id="saved-links" class="saved-links" aria-live="polite"></div>
+        </section>
+        <dialog id="detail-modal" class="detail-modal">
+            <div class="detail-content">
+                <div class="detail-header">
+                    <h2>Prischeck</h2>
+                    <button id="detail-close" class="button-close" aria-label="Stäng detaljer">×</button>
+                </div>
+                <div class="detail-body">
+                    <img id="detail-cover" class="detail-cover" alt="">
+                    <div class="detail-info">
+                        <p class="detail-field"><strong id="detail-artist"></strong></p>
+                        <p class="detail-field"><strong id="detail-title"></strong></p>
+                        <p class="detail-field detail-year" id="detail-year-wrap"></p>
+                        <p class="detail-field detail-meta" id="detail-barcode"></p>
+                    </div>
+                </div>
+            </div>
+        </dialog>
+    </main>
+    <script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
