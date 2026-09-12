@@ -89,16 +89,6 @@ function stopCamera() {
     controls = null;
 }
 
-function improveBarcodeView(stream) {
-    const track = stream?.getVideoTracks?.()[0];
-    if (!track?.getCapabilities || !track?.applyConstraints) return;
-    const capabilities = track.getCapabilities();
-    const zoom = capabilities.zoom;
-    if (!zoom || zoom.max <= 1) return;
-    const target = Math.min(2.5, zoom.max);
-    track.applyConstraints({ advanced: [{ zoom: target }] }).catch(() => { });
-}
-
 async function addScan(barcode) {
     if (/^https?:\/\//i.test(barcode)) {
         links.unshift({ value: barcode, savedAt: new Date().toISOString() });
@@ -271,7 +261,6 @@ async function startCamera() {
                     },
                 );
             }
-            improveBarcodeView(camera.srcObject);
             return;
         }
 
@@ -289,7 +278,6 @@ async function startCamera() {
             if (error.name !== 'OverconstrainedError' && error.name !== 'NotFoundError') throw error;
             stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
-        improveBarcodeView(stream);
         camera.srcObject = stream;
         camera.muted = true;
         camera.setAttribute('playsinline', '');
