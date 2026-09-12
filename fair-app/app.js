@@ -234,9 +234,9 @@ async function startCamera() {
         if (!('BarcodeDetector' in window)) {
             let zxing;
             try {
-                zxing = await loadZXing();
-            } catch {
                 zxing = await loadLegacyZXing();
+            } catch {
+                zxing = await loadZXing();
             }
             const Reader = zxing.BrowserMultiFormatReader;
             const reader = new Reader();
