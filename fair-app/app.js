@@ -5,14 +5,19 @@ const pricePanel = document.querySelector('#price-panel');
 const checkPrice = document.querySelector('#check-price');
 const result = document.querySelector('#price-result');
 const priceSignal = document.querySelector('#price-signal');
+const resultCover = document.querySelector('#result-cover');
 const resultTitle = document.querySelector('#result-title');
 const resultArtist = document.querySelector('#result-artist');
+const resultCatalog = document.querySelector('#result-catalog');
 const resultAskingPrice = document.querySelector('#result-asking-price');
 const resultLowestPrice = document.querySelector('#result-lowest-price');
+const resultAveragePrice = document.querySelector('#result-average-price');
 const resultMedianPrice = document.querySelector('#result-median-price');
+const resultHighestPrice = document.querySelector('#result-highest-price');
 const savedLinks = document.querySelector('#saved-links');
 let controls = null;
 let pendingBarcode = null;
+let pendingRelease = null;
 let links = JSON.parse(localStorage.getItem('ktom-fair-links-v1') || '[]');
 
 function formatPrice(value) {
@@ -37,11 +42,22 @@ async function addScan(barcode) {
         status.textContent = 'Webbadress sparad lokalt. Nästa scanning startar.';
         return;
     }
-    pendingBarcode = barcode;
-    pricePanel.hidden = false;
-    askingPrice.focus();
     status.className = 'status status-neutral';
-    status.textContent = `Barcode ${barcode} läst. Skriv säljarens pris.`;
+    status.textContent = `Barcode ${barcode} läst - hämtar skivinformation...`;
+    try {
+        pendingBarcode = barcode;
+        pendingRelease = await lookupDiscogs(barcode);
+        showReleaseInfo(pendingRelease, barcode);
+        pricePanel.hidden = false;
+        askingPrice.focus();
+        status.textContent = 'Skivan hittad. Skriv säljarens pris.';
+    } catch (error) {
+        pendingBarcode = null;
+        pendingRelease = null;
+        pricePanel.hidden = true;
+        status.className = 'status status-error';
+        status.textContent = `Kunde inte hämta skivinformation: ${error.message}`;
+    }
 }
 
 async function checkPendingPrice() {
@@ -52,15 +68,23 @@ async function checkPendingPrice() {
         askingPrice.focus();
         return;
     }
-    status.className = 'status status-neutral';
-    status.textContent = `Hämtar marknadspris för ${pendingBarcode}...`;
-    try {
-        const release = await lookupDiscogs(pendingBarcode);
-        showPriceResult(release, pendingBarcode);
-    } catch (error) {
-        status.className = 'status status-error';
-        status.textContent = `Kunde inte hämta pris: ${error.message}`;
-    }
+    showPriceResult(pendingRelease, pendingBarcode);
+}
+
+function showReleaseInfo(release, barcode) {
+    result.hidden = false;
+    priceSignal.className = 'price-signal price-unknown';
+    priceSignal.textContent = 'ANGE BEGÄRT PRIS';
+    resultCover.src = release.coverUrl || '';
+    resultCover.hidden = !release.coverUrl;
+    resultTitle.textContent = release.title || 'Okänd utgåva';
+    resultArtist.textContent = release.artist || 'Okänd artist';
+    resultCatalog.textContent = `Ryggnummer: ${release.catalogNumber || 'Saknas'} · Barcode: ${barcode}`;
+    resultAskingPrice.textContent = 'Väntar på pris';
+    resultLowestPrice.textContent = formatPrice(release.lowestPrice);
+    resultAveragePrice.textContent = formatPrice(release.averagePrice);
+    resultMedianPrice.textContent = formatPrice(release.medianPrice);
+    resultHighestPrice.textContent = formatPrice(release.highestPrice);
 }
 
 function showPriceResult(release, barcode) {
@@ -90,11 +114,12 @@ function showPriceResult(release, barcode) {
     result.hidden = false;
     priceSignal.className = `price-signal ${signalClass}`;
     priceSignal.textContent = signal;
-    resultTitle.textContent = release.title || 'Okänd utgåva';
-    resultArtist.textContent = `${release.artist || 'Okänd artist'} · ${explanation}`;
+    resultCatalog.textContent = `Ryggnummer: ${release.catalogNumber || 'Saknas'} · ${explanation}`;
     resultAskingPrice.textContent = formatPrice(asking);
     resultLowestPrice.textContent = formatPrice(lowest);
+    resultAveragePrice.textContent = formatPrice(release.averagePrice);
     resultMedianPrice.textContent = formatPrice(median);
+    resultHighestPrice.textContent = formatPrice(release.highestPrice);
     status.className = 'status status-success';
     status.textContent = 'Prisbedömning klar.';
 }
@@ -112,11 +137,26 @@ async function lookupDiscogs(barcode) {
     const release = await releaseResponse.json();
     const lowestPrice = release.lowest_price ?? release.marketplace_stats?.lowest_price?.value;
     const medianPrice = release.marketplace_stats?.median_price?.value ?? release.stats?.median_price?.value;
+    const highestPrice = release.highest_price ?? release.marketplace_stats?.highest_price?.value;
+    const numericPrices = [lowestPrice, medianPrice, highestPrice]
+        .map(Number)
+        .filter(Number.isFinite);
+    const averagePrice = numericPrices.length
+        ? numericPrices.reduce((total, price) => total + price, 0) / numericPrices.length
+        : NaN;
+    const catalogNumber = (release.labels || [])
+        .map(label => label.catno)
+        .filter(Boolean)
+        .join(' / ');
     return {
         title: release.title || match.title,
         artist: (release.artists || []).map(artist => artist.name).join(', '),
+        catalogNumber,
+        coverUrl: release.images?.[0]?.uri || match.cover_image || '',
         lowestPrice: Number.isFinite(Number(lowestPrice)) ? Number(lowestPrice) * 11 : NaN,
+        averagePrice: Number.isFinite(averagePrice) ? averagePrice * 11 : NaN,
         medianPrice: Number.isFinite(Number(medianPrice)) ? Number(medianPrice) * 11 : NaN,
+        highestPrice: Number.isFinite(Number(highestPrice)) ? Number(highestPrice) * 11 : NaN,
     };
 }
 
@@ -148,7 +188,8 @@ async function startCamera() {
         } else if (window.ZXingBrowser) {
             const reader = new ZXingBrowser.BrowserMultiFormatReader();
             controls.reader = reader;
-            reader.decodeFromVideoElement(camera, async scanResult => {
+            await camera.play();
+            reader.decodeFromStream(stream, camera, async scanResult => {
                 if (!scanResult || !controls || controls.stopped) return;
                 stopCamera();
                 await addScan(scanResult.getText());
@@ -175,6 +216,7 @@ document.querySelector('#scan-again').addEventListener('click', () => {
     pricePanel.hidden = true;
     askingPrice.value = '';
     pendingBarcode = null;
+    pendingRelease = null;
     startCamera();
 });
 
