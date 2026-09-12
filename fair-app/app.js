@@ -244,8 +244,9 @@ async function startCamera() {
             const scanFrame = async () => {
                 if (!controls || controls.stopped) return;
                 if (camera.videoWidth && camera.videoHeight) {
-                    canvas.width = camera.videoWidth;
-                    canvas.height = camera.videoHeight;
+                    const scale = Math.min(1, 1280 / camera.videoWidth);
+                    canvas.width = Math.round(camera.videoWidth * scale);
+                    canvas.height = Math.round(camera.videoHeight * scale);
                     context.drawImage(camera, 0, 0, canvas.width, canvas.height);
                     try {
                         const scanResult = reader.decodeFromCanvas(canvas);
@@ -256,7 +257,7 @@ async function startCamera() {
                         }
                     } catch { }
                 }
-                window.setTimeout(scanFrame, 100);
+                window.setTimeout(scanFrame, 55);
             };
             scanFrame();
             return;
