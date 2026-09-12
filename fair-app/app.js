@@ -176,6 +176,8 @@ async function startCamera() {
             stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
         camera.srcObject = stream;
+        camera.muted = true;
+        camera.setAttribute('playsinline', '');
         await camera.play();
         status.className = 'status status-neutral';
         status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
@@ -199,7 +201,7 @@ async function startCamera() {
         } else if (window.ZXingBrowser) {
             const reader = new ZXingBrowser.BrowserMultiFormatReader();
             controls.reader = reader;
-            reader.decodeFromStream(stream, camera, async scanResult => {
+            reader.decodeFromVideoElement(camera, async scanResult => {
                 if (!scanResult || !controls || controls.stopped) return;
                 stopCamera();
                 await addScan(scanResult.getText());
