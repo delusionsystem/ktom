@@ -25,8 +25,8 @@ function loadZXing() {
     if (window.ZXingBrowser) return Promise.resolve(window.ZXingBrowser);
     return new Promise((resolve, reject) => {
         const sources = [
-            'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js',
-            'https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js',
+            'https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js',
+            'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js',
         ];
         let index = 0;
         const tryNext = () => {
