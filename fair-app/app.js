@@ -165,8 +165,18 @@ async function startCamera() {
     try {
         if (controls && !controls.stopped) return;
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('HTTPS_REQUIRED');
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: false,
+            });
+        } catch (error) {
+            if (error.name !== 'OverconstrainedError' && error.name !== 'NotFoundError') throw error;
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
         camera.srcObject = stream;
+        await camera.play();
         status.className = 'status status-neutral';
         status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
         controls = { stream, stopped: false };
@@ -189,7 +199,6 @@ async function startCamera() {
         } else if (window.ZXingBrowser) {
             const reader = new ZXingBrowser.BrowserMultiFormatReader();
             controls.reader = reader;
-            await camera.play();
             reader.decodeFromStream(stream, camera, async scanResult => {
                 if (!scanResult || !controls || controls.stopped) return;
                 stopCamera();
@@ -206,7 +215,11 @@ async function startCamera() {
             ? 'Kameran kräver HTTPS. Öppna mässappen via en https-adress.'
             : error.message === 'BARCODE_SUPPORT'
                 ? 'Barcode-stöd saknas. Kontrollera internetanslutningen och ladda om sidan.'
-                : 'Kameran kunde inte startas. Tillåt kameraåtkomst och försök igen.';
+                : error.name === 'NotAllowedError'
+                    ? 'Kameraåtkomst nekades. Tillåt kamera för Safari i iPadens inställningar.'
+                    : error.name === 'NotReadableError'
+                        ? 'Kameran används redan av en annan app eller flik.'
+                        : `Kameran kunde inte startas (${error.name || 'okänt fel'}).`;
     }
 }
 
