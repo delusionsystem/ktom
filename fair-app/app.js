@@ -48,6 +48,33 @@ function loadZXing() {
     });
 }
 
+function loadLegacyZXing() {
+    if (window.ZXing?.BrowserMultiFormatReader) return Promise.resolve(window.ZXing);
+    return new Promise((resolve, reject) => {
+        const sources = [
+            'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js',
+            'https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js',
+        ];
+        let index = 0;
+        const tryNext = () => {
+            if (window.ZXing?.BrowserMultiFormatReader) {
+                resolve(window.ZXing);
+                return;
+            }
+            if (index >= sources.length) {
+                reject(new Error('BARCODE_SUPPORT'));
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = sources[index++];
+            script.onload = () => window.ZXing?.BrowserMultiFormatReader ? resolve(window.ZXing) : tryNext();
+            script.onerror = tryNext;
+            document.head.append(script);
+        };
+        tryNext();
+    });
+}
+
 function formatPrice(value) {
     return Number.isFinite(value) ? `${Math.round(value)} kr` : 'Saknas';
 }
@@ -195,20 +222,38 @@ async function startCamera() {
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('HTTPS_REQUIRED');
 
         if (!('BarcodeDetector' in window)) {
-            const zxing = await loadZXing();
-            const reader = new zxing.BrowserMultiFormatReader();
+            let zxing;
+            try {
+                zxing = await loadZXing();
+            } catch {
+                zxing = await loadLegacyZXing();
+            }
+            const Reader = zxing.BrowserMultiFormatReader;
+            const reader = new Reader();
             controls = { stopped: false, reader };
             status.className = 'status status-neutral';
             status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
-            controls.readerControls = await reader.decodeFromConstraints(
-                { video: { facingMode: { ideal: 'environment' } }, audio: false },
-                camera,
-                async scanResult => {
-                    if (!scanResult || !controls || controls.stopped) return;
-                    stopCamera();
-                    await addScan(scanResult.getText());
-                },
-            );
+            if (reader.decodeFromConstraints) {
+                controls.readerControls = await reader.decodeFromConstraints(
+                    { video: { facingMode: { ideal: 'environment' } }, audio: false },
+                    camera,
+                    async scanResult => {
+                        if (!scanResult || !controls || controls.stopped) return;
+                        stopCamera();
+                        await addScan(scanResult.getText());
+                    },
+                );
+            } else {
+                controls.readerControls = await reader.decodeFromVideoDevice(
+                    undefined,
+                    camera,
+                    async scanResult => {
+                        if (!scanResult || !controls || controls.stopped) return;
+                        stopCamera();
+                        await addScan(scanResult.getText());
+                    },
+                );
+            }
             return;
         }
 
