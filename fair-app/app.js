@@ -55,8 +55,9 @@ function formatPrice(value) {
 function stopCamera() {
     if (!controls) return;
     controls.stopped = true;
+    controls.readerControls?.stop();
     controls.reader?.reset();
-    controls.stream.getTracks().forEach(track => track.stop());
+    controls.stream?.getTracks().forEach(track => track.stop());
     camera.srcObject = null;
     controls = null;
 }
@@ -192,6 +193,25 @@ async function startCamera() {
     try {
         if (controls && !controls.stopped) return;
         if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error('HTTPS_REQUIRED');
+
+        if (!('BarcodeDetector' in window)) {
+            const zxing = await loadZXing();
+            const reader = new zxing.BrowserMultiFormatReader();
+            controls = { stopped: false, reader };
+            status.className = 'status status-neutral';
+            status.textContent = 'Kamera aktiv - visa streckkoden för kameran.';
+            controls.readerControls = await reader.decodeFromConstraints(
+                { video: { facingMode: { ideal: 'environment' } }, audio: false },
+                camera,
+                async scanResult => {
+                    if (!scanResult || !controls || controls.stopped) return;
+                    stopCamera();
+                    await addScan(scanResult.getText());
+                },
+            );
+            return;
+        }
+
         let stream;
         try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -225,15 +245,6 @@ async function startCamera() {
                 requestAnimationFrame(scan);
             };
             requestAnimationFrame(scan);
-        } else {
-            const zxing = await loadZXing();
-            const reader = new zxing.BrowserMultiFormatReader();
-            controls.reader = reader;
-            reader.decodeFromVideoElement(camera, async scanResult => {
-                if (!scanResult || !controls || controls.stopped) return;
-                stopCamera();
-                await addScan(scanResult.getText());
-            });
         }
     } catch (error) {
         stopCamera();
