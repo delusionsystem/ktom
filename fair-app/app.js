@@ -1,4 +1,5 @@
 const camera = document.querySelector('#camera');
+const cameraWrap = document.querySelector('#camera-wrap');
 const status = document.querySelector('#scan-status');
 const askingPrice = document.querySelector('#asking-price');
 const pricePanel = document.querySelector('#price-panel');
@@ -210,6 +211,13 @@ async function startCamera() {
 }
 
 document.querySelector('#start-camera').addEventListener('click', startCamera);
+cameraWrap.addEventListener('click', startCamera);
+cameraWrap.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        startCamera();
+    }
+});
 checkPrice.addEventListener('click', checkPendingPrice);
 document.querySelector('#scan-again').addEventListener('click', () => {
     result.hidden = true;

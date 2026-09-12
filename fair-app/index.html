@@ -14,7 +14,7 @@
     <main class="app-shell">
         <header class="app-header">
             <div>
-                <p class="eyebrow">KEEP TRACK OF MEDIA</p>
+                <div class="brand-mark" aria-label="KTOM">KTOM</div>
                 <h1>Prischeck</h1>
             </div>
         </header>
@@ -27,7 +27,7 @@
                 </div>
                 <button id="start-camera" class="button button-primary">Starta kamera</button>
             </div>
-            <div class="camera-wrap">
+            <div id="camera-wrap" class="camera-wrap" role="button" tabindex="0" aria-label="Starta kamera">
                 <video id="camera" autoplay muted playsinline></video>
                 <div class="scan-frame" aria-hidden="true"></div>
             </div>
@@ -43,8 +43,10 @@
         </section>
         <section id="price-result" class="price-result" aria-live="polite" hidden>
             <p id="price-signal" class="price-signal"></p>
+            <img id="result-cover" class="result-cover" alt="Omslag">
             <h2 id="result-title"></h2>
             <p id="result-artist" class="result-meta"></p>
+            <p id="result-catalog" class="result-catalog"></p>
             <dl class="price-facts">
                 <div>
                     <dt>Begärt pris</dt>
@@ -55,8 +57,16 @@
                     <dd id="result-lowest-price"></dd>
                 </div>
                 <div>
+                    <dt>Genomsnitt</dt>
+                    <dd id="result-average-price"></dd>
+                </div>
+                <div>
                     <dt>Median Discogs-pris</dt>
                     <dd id="result-median-price"></dd>
+                </div>
+                <div>
+                    <dt>Högsta Discogs-pris</dt>
+                    <dd id="result-highest-price"></dd>
                 </div>
             </dl>
             <button id="scan-again" class="button button-primary">Scanna nästa</button>
